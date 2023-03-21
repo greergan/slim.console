@@ -37,7 +37,7 @@ window.SlimConsole = new slim.colorconsole.SlimColorConsole({propogate: true, su
         messageValue:{suppress:false, textColor:"cyan"},
         objectString:{suppress:false}
     },
-    debug:{
+    debug:{ suppress:true,
         level:{suppress:false},
         className:{suppress:false,bold:true},
         methodName:{suppress:false,bold:true},
