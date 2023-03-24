@@ -5,22 +5,32 @@ import { configuration } from "./configuration.d.ts";
 import { configure, configurationLevels, configurationSubLevels } from "./configuration.ts";
 import * as colors from "./color.ts";
 import { LogInformation } from "./logging.ts";
+declare global {
+    var SlimConsole:colorconsole.SlimColorConsole;
+    interface Window {
+        SlimConsole:colorconsole.SlimColorConsole;
+    }
+}
+window.console
 export class SlimColorConsole implements colorconsole.iConsole {
     configurations:configuration.iConfigurations = {};
+    levelSuppressions:slim.types.iKeyValueAny = {};
     master_configuration:slim.types.iKeyValueAny = {};
     constructor(configuration?:slim.types.iKeyValueAny) {
-        const lower_case_levels = configurationLevels.map(element => element.toLowerCase());
+        const lower_case_levels:string[] = configurationLevels.map(element => element.toLowerCase());
         if(typeof configuration !== 'object') {
             configuration = {};
         }
         else {
             this.master_configuration = slim.utilities.copy_ofSync(configuration, {skip:lower_case_levels});
+            this.levelSuppressions = slim.utilities.copy_ofSync(configuration['levelSuppressions']);
         }
         for(const level of configurationLevels) {
             const levelConfiguration = slim.utilities.comingleSync([this.master_configuration, configuration[level.toLowerCase()]], {}) as configuration.iPrintProperties;
             levelConfiguration.levelName = level;
             this.configurations[level.toLowerCase()] = configure(levelConfiguration);
         }
+        window.console = this;
     }
     abort(...args:any) {
         this.print(new LogInformation(args), this.configurations.abort);
@@ -28,36 +38,29 @@ export class SlimColorConsole implements colorconsole.iConsole {
             Deno.exit(1);
         }
     }
-    assert() {
-
-    }
-    clear() {
-
-    }
-    dir(...args:any) {
-
-    }
-    debug(...args:any): void {
-        this.print(new LogInformation(args), this.configurations.debug);
-    }
-    error(...args:any): void {
-        this.print(new LogInformation(args), this.configurations.error);
-    }
-    info(...args:any): void {
-        this.print(new LogInformation(args), this.configurations.info);
-    }
-    log(...args:any): void {
-        this.print(new LogInformation(args), this.configurations.log);
-    }
-    todo(...args:any): void {
-        this.print(new LogInformation(args), this.configurations.todo);
-    }
-    trace(...args:any): void {
-        this.print(new LogInformation(args), this.configurations.trace);
-    }
-    warn(...args:any): void {
-        this.print(new LogInformation(args), this.configurations.warn);
-    }
+    assert(...args:any):void {}
+    clear():void {}
+    count(...args:any):void {}
+    countReset(...args:any):void {}
+    dir(...args:any):void {}
+    dirxml(...args:any):void {}
+    debug(...args:any):void { this.print(new LogInformation(args), this.configurations.debug); }
+    error(...args:any):void { this.print(new LogInformation(args), this.configurations.error); }
+    group(...args:any):void {}
+    groupCollapsed(...args:any):void {}
+    groupEnd(...args:any):void {}
+    info(...args:any):void { this.print(new LogInformation(args), this.configurations.info); }
+    log(...args:any):void { this.print(new LogInformation(args), this.configurations.log); }
+    profile(...args:any):void {}
+    profileEnd(...args:any):void {}
+    table(...args:any):void {}
+    time(...args:any):void {}
+    timeEnd(...args:any):void {}
+    timeLog(...args:any):void {}
+    timeStamp(...args:any):void {}
+    todo(...args:any):void { this.print(new LogInformation(args), this.configurations.todo); }
+    trace(...args:any):void { this.print(new LogInformation(args), this.configurations.trace); }
+    warn(...args:any):void { this.print(new LogInformation(args), this.configurations.warn); }
     colorize(string_value:string, configuration:configuration.iPrintProperties): string {
         let colored_string = "";
         if(string_value !== undefined && !configuration.suppress) {
@@ -114,9 +117,28 @@ export class SlimColorConsole implements colorconsole.iConsole {
     }
     print(event:LogInformation, configuration:configuration.iConfiguration): void {
         const saved_configuration:configuration.iConfiguration = {};
-        if('SlimConsoleSuppression' in window) {
-            if(configuration.level.levelName.toLowerCase() in SlimConsoleSuppression) {
-                if(SlimConsoleSuppression[configuration.level.levelName.toLowerCase()]) {
+        const levelName:string = configuration!.level!['levelName'];
+        if(levelName.toLowerCase() in this.levelSuppressions) {
+            if(this.levelSuppressions[levelName.toLowerCase()]) {
+                return;
+            }
+        }
+        const slim_module:string = event.properties.path.match(/slim.\w*/);
+        if(this.levelSuppressions.hasOwnProperty(slim_module)) {
+            if(this.levelSuppressions[slim_module][levelName.toLowerCase()]) {
+                return;
+            }
+            if(this.levelSuppressions[slim_module].hasOwnProperty('files')) {
+                const file:object = this.levelSuppressions[slim_module].files.find(
+                    file => file.name == event.properties.fileName.substring(event.properties.fileName.lastIndexOf('/') + 1)
+                );
+                if(file && file[levelName.toLowerCase()]) {
+                    return;
+                }
+            }
+            if(this.levelSuppressions[slim_module].hasOwnProperty('functions')) {
+                const funct:object = this.levelSuppressions[slim_module].functions.find(funct => funct.name == event.properties.methodName);
+                if(funct && funct[levelName.toLowerCase()]) {
                     return;
                 }
             }
@@ -129,26 +151,19 @@ export class SlimColorConsole implements colorconsole.iConsole {
                 }
             }
         }
-
         let printable_string:string = "";
-        const levelName:string = configuration!.level!['levelName'] as string;
         printable_string += this.colorize(levelName, configuration.level);
         printable_string += this.colorize(event.properties.path, configuration.path);
-        printable_string += this.colorize(event.properties.className, configuration.className);
-        printable_string += this.colorize(event.properties.methodName, configuration.methodName);
         printable_string += this.colorize(event.properties.fileName, configuration.fileName);
         printable_string += this.colorize(event.properties.lineNumber, configuration.lineNumber);
+        printable_string += this.colorize(event.properties.className, configuration.className);
+        printable_string += this.colorize(event.properties.methodName, configuration.methodName);
         printable_string += this.colorize(event.properties.messageText, configuration.messageText);
         printable_string += this.colorize(event.properties.messageValue, configuration.messageValue);
         printable_string += this.colorize(event.properties.objectString, configuration.objectString);
         printable_string += this.colorize(event.properties.stackTrace, configuration.stackTrace);
-        if(Deno !== undefined && printable_string.length > 0) {
-            Deno.stderr.writeSync(new TextEncoder().encode(`${printable_string}\n`));
-        }
-        if('SLIMOVERRIDES' in event.overrides) {
-            if('stackTrace' in event.overrides.SLIMOVERRIDES) {
-                configuration.stackTrace = slim.utilities.comingleSync([configuration.stackTrace, configuration.stackTrace_original]);
-            }
+        if(printable_string.length > 0) {
+            this.write(printable_string);
         }
         if('SLIMOVERRIDES' in event.overrides) {
             for(const subLevel of configurationSubLevels) {
@@ -157,6 +172,11 @@ export class SlimColorConsole implements colorconsole.iConsole {
                     delete saved_configuration[subLevel];
                 }
             }
+        }
+    }
+    write(string_to_print:string):void {
+        if('Deno' in window) {
+            Deno.stderr.writeSync(new TextEncoder().encode(`${string_to_print}\n`));
         }
     }
 }
